@@ -1,0 +1,62 @@
+/* 🔐 Flask Security Lab — Clean Minimal Style */
+
+body {
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #f4f6f8;
+    margin: 0;
+    padding: 0;
+}
+
+h1 {
+    background-color: #1f2937;
+    color: white;
+    padding: 16px;
+    margin: 0;
+}
+
+.container {
+    padding: 30px;
+}
+
+h2 {
+    color: #111827;
+}
+
+a {
+    color: #2563eb;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+form {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    width: fit-content;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+input, textarea {
+    padding: 8px;
+    margin-top: 5px;
+    margin-bottom: 10px;
+    width: 250px;
+}
+
+button {
+    background-color: #2563eb;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+button:hover {
+    background-color: #1d4ed8;
+}

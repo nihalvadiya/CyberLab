@@ -1,4 +1,4 @@
-#  Flask Web Security Lab
+#  Cyber Lab
 
 A hands-on **web application security playground** built with Flask to demonstrate common OWASP Top 10 vulnerabilities — along with their real-world mitigations.
 

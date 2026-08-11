@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Admin — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Admin panel</h2>
+<p class="hint">Reached only after both checks pass: signed in
+(authentication) and holding the admin role (authorisation).</p>
+
+<table class="ledger">
+    <thead>
+        <tr><th>Username</th><th>Role</th><th>Balance</th><th>Failed attempts</th></tr>
+    </thead>
+    <tbody>
+    {% for u in users %}
+        <tr>
+            <td>{{ u['username'] }}</td>
+            <td>{{ 'admin' if u['is_admin'] else 'user' }}</td>
+            <td>${{ u['balance_cents'] | money }}</td>
+            <td>{{ u['failed_attempts'] }}{% if u['lock_until'] %} (locked){% endif %}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

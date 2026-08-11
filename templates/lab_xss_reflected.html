@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Reflected XSS lab — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Vulnerable search (reflected XSS)</h2>
+<p class="warn">The query string is echoed without escaping. Try
+<code>?q=&lt;img src=x onerror=alert(1)&gt;</code>, then compare with
+<a href="{{ url_for('search') }}">/search</a>.</p>
+
+<form method="get">
+    <label for="q">Query</label>
+    <input id="q" name="q" value="{{ query }}">
+    <button type="submit">Search</button>
+</form>
+
+<h3>Results for: {{ query | safe }}</h3>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Profile — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Profile</h2>
+<p>Signed in as <strong>{{ user }}</strong>.</p>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="bio">Your bio</label>
+    <textarea id="bio" name="bio" rows="5" maxlength="2000">{{ bio }}</textarea>
+    <button type="submit">Save bio</button>
+</form>
+
+<h3>Saved bio</h3>
+{% if bio %}
+    {# Autoescaped by Jinja: markup in the bio renders as text, not as HTML. #}
+    <p class="bio">{{ bio }}</p>
+{% else %}
+    <p class="hint">Nothing saved yet.</p>
+{% endif %}
+{% endblock %}

@@ -1,372 +1,347 @@
-from flask import Flask, render_template, render_template_string, request, redirect, session
-import bcrypt
-import sqlite3
+"""
+CyberLab — a Flask web application security lab.
+
+Run without ``CYBERLAB_LAB_MODE`` and only the hardened application exists: the
+deliberately vulnerable training endpoints are never registered, so they return
+404 rather than relying on a runtime check somewhere inside the handler.
+
+Set ``CYBERLAB_LAB_MODE=1`` to mount the vulnerable endpoints under ``/lab``.
+That mode is for an isolated machine, never a public host.
+"""
+
+from __future__ import annotations
+
+import os
 import time
-import secrets
-from datetime import datetime
 
-app = Flask(__name__)
-app.secret_key = "change-this-to-a-long-random-secret-key"
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from werkzeug.exceptions import HTTPException
 
-# 🔐 Secure session cookie settings
-app.config.update(
-    SESSION_COOKIE_HTTPONLY=True,   # JS cannot read cookie
-    SESSION_COOKIE_SECURE=False,    # True only when using HTTPS
-    SESSION_COOKIE_SAMESITE=None   # CSRF protection temporarily changed to none from "lax"
+import config
+import db
+from security import (
+    ValidationError,
+    client_ip,
+    csrf_token,
+    enforce_csrf,
+    format_cents,
+    login_limiter,
+    parse_amount_to_cents,
+    rotate_csrf_token,
+    validate_password,
+    validate_username,
 )
 
-# ---------- CSP HEADER ----------
-@app.after_request
-def add_security_headers(response):
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:;"
+# Deliberately identical for every failure reason. Distinct messages for "no such
+# user", "wrong password" and "locked" let an attacker enumerate valid accounts.
+GENERIC_LOGIN_ERROR = (
+    "Invalid username or password, or the account is temporarily locked."
+)
+
+
+def create_app() -> Flask:
+    app = Flask(__name__)
+    app.secret_key = config.load_secret_key()
+
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SECURE=config.FORCE_HTTPS,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_NAME="cyberlab_session",
+        PERMANENT_SESSION_LIFETIME=60 * 60 * 8,
+        MAX_CONTENT_LENGTH=64 * 1024,
+        JSON_SORT_KEYS=False,
     )
-    return response
 
+    if config.TRUSTED_PROXY_COUNT > 0:
+        from werkzeug.middleware.proxy_fix import ProxyFix
 
-DATABASE_FILE = "database/auth.db"
-
-MAX_ATTEMPTS = 2
-LOCK_DURATION_SECONDS = 120
-
-
-def connect_db():
-    return sqlite3.connect(DATABASE_FILE)
-
-
-def setup_database():
-    conn = connect_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password_hash TEXT,
-        failed_attempts INTEGER,
-        lock_until INTEGER
-    )
-    """)
-
-    conn.commit()
-    conn.close()
-
-def is_admin_user(username):
-    # Simple demo rule: username "admin" is admin
-    return username == "admin"
-
-
-# ---------- HOME ----------
-@app.route("/")
-def home():
-    return render_template("home.html", user=session.get("user"))
-
-
-# ---------- REGISTER ----------
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"].encode()
-
-        hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode()
-
-        conn = connect_db()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                INSERT INTO users (username, password_hash, failed_attempts, lock_until)
-                VALUES (?, ?, 0, 0)
-            """, (username, hashed))
-            conn.commit()
-            msg = "User registered!"
-        except sqlite3.IntegrityError:
-            msg = "Username already exists!"
-
-        conn.close()
-        return msg + "<br><a href='/login'>Go to login</a>"
-
-    return """
-    <h2>Register</h2>
-    <form method="post">
-        Username: <input name="username"><br><br>
-        Password: <input name="password" type="password"><br><br>
-        <button type="submit">Register</button>
-    </form>
-    """
-
-
-# ---------- LOGIN (SECURE) ----------
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"].encode()
-
-        conn = connect_db()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT password_hash, failed_attempts, lock_until FROM users WHERE username = ?",
-            (username,)
+        app.wsgi_app = ProxyFix(
+            app.wsgi_app,
+            x_for=config.TRUSTED_PROXY_COUNT,
+            x_proto=config.TRUSTED_PROXY_COUNT,
+            x_host=config.TRUSTED_PROXY_COUNT,
         )
-        result = cursor.fetchone()
 
-        if not result:
-            return "User not found!"
+    app.jinja_env.globals["csrf_token"] = csrf_token
+    app.jinja_env.globals["lab_mode"] = config.LAB_MODE
+    app.jinja_env.filters["money"] = format_cents
 
-        stored_hash, attempts, lock_until = result
-        current_time = int(time.time())
+    db.setup_database()
 
-        if lock_until > current_time:
-            remaining = lock_until - current_time
-            return f"Account locked. Try again in {remaining} seconds."
+    _register_hooks(app)
+    _register_routes(app)
+    _register_error_handlers(app)
 
-        if bcrypt.checkpw(password, stored_hash.encode()):
-            cursor.execute(
-                "UPDATE users SET failed_attempts = 0, lock_until = 0 WHERE username = ?",
-                (username,)
+    if config.LAB_MODE:
+        from lab_routes import lab
+
+        app.register_blueprint(lab, url_prefix="/lab")
+
+    return app
+
+
+# --------------------------------------------------------------------- hooks
+
+
+def _register_hooks(app: Flask) -> None:
+    @app.before_request
+    def _csrf() -> None:
+        enforce_csrf()
+
+    @app.after_request
+    def _security_headers(response):
+        # No 'unsafe-inline' anywhere: all styles live in static/style.css, so an
+        # injected <style> or style="" payload cannot execute.
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self'; "
+            "img-src 'self' data:; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'none'; "
+            "object-src 'none'"
+        )
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = (
+            "geolocation=(), microphone=(), camera=(), interest-cohort=()"
+        )
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        if config.FORCE_HTTPS:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
             )
-            conn.commit()
-            conn.close()
-
-            session["user"] = username
-            return redirect("/")
-        else:
-            attempts += 1
-
-            if attempts >= MAX_ATTEMPTS:
-                lock_until = current_time + LOCK_DURATION_SECONDS
-                cursor.execute(
-                    "UPDATE users SET failed_attempts = ?, lock_until = ? WHERE username = ?",
-                    (attempts, lock_until, username)
-                )
-                conn.commit()
-                conn.close()
-                return "Too many failed attempts. Account locked."
-
-            cursor.execute(
-                "UPDATE users SET failed_attempts = ? WHERE username = ?",
-                (attempts, username)
-            )
-            conn.commit()
-            conn.close()
-            return "Wrong password."
-
-    return render_template("login.html")
+        return response
 
 
-# ---------- VULNERABLE LOGIN (FIXED DEMO) ----------
-@app.route("/login_vuln", methods=["GET", "POST"])
-def login_vuln():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
+def _current_user() -> str | None:
+    return session.get("user")
 
-        conn = connect_db()
-        cursor = conn.cursor()
 
-        query = f"SELECT * FROM users WHERE username = '{username}' AND password_hash = '{password}'"
-        print("DEBUG QUERY:", query)
+def _require_login() -> str:
+    user = _current_user()
+    if not user:
+        abort(401)
+    return user
+
+
+# -------------------------------------------------------------------- routes
+
+
+def _register_routes(app: Flask) -> None:
+    @app.route("/")
+    def home():
+        return render_template("home.html", user=_current_user())
+
+    # ------------------------------------------------------------- register
+    @app.route("/register", methods=["GET", "POST"])
+    def register():
+        if request.method == "GET":
+            return render_template("register.html")
+
+        if not login_limiter.check(f"register:{client_ip()}"):
+            abort(429)
 
         try:
-            cursor.execute(query)
-            result = cursor.fetchone()
-        except Exception as e:
-            conn.close()
-            return f"SQL Error: {e}"
+            username = validate_username(request.form.get("username", ""))
+            password = validate_password(request.form.get("password", ""))
+        except ValidationError as exc:
+            flash(str(exc), "error")
+            return render_template("register.html"), 400
 
-        conn.close()
+        if not db.create_user(username, password):
+            # Same wording and status as success would be ideal, but a registration
+            # form has to tell the user the name is taken to be usable at all.
+            flash("That username is not available.", "error")
+            return render_template("register.html"), 409
 
-        if result:
-            session["user"] = "hacked_user"
-            return "<h2>Login successful (VULNERABLE)</h2>"
-        else:
-            return "Invalid credentials"
+        flash("Account created. You can sign in now.", "success")
+        return redirect(url_for("login"))
 
-    return """
-    <h2>Vulnerable Login (SQL Injection Demo)</h2>
-    <form method="post">
-        Username: <input name="username"><br><br>
-        Password: <input name="password" type="password"><br><br>
-        <button type="submit">Login</button>
-    """
+    # ---------------------------------------------------------------- login
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if request.method == "GET":
+            return render_template("login.html")
 
+        ip = client_ip()
+        if not login_limiter.check(f"login:{ip}"):
+            flash(
+                f"Too many attempts. Try again in {login_limiter.retry_after(f'login:{ip}')} seconds.",
+                "error",
+            )
+            return render_template("login.html"), 429
 
-# ---------- PROFILE (XSS SAFE) ----------
-@app.route("/profile_safe", methods=["GET", "POST"])
-def profile_safe():
-    if "user" not in session:
-        return redirect("/login")
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
 
-    if request.method == "POST":
-        bio = request.form["bio"]
-        session["bio"] = bio
+        row = db.get_user(username) if username else None
+        now = int(time.time())
 
-    bio_display = session.get("bio", "")
+        # Runs even when the row is missing, so the response time is the same
+        # either way and cannot be used to probe for valid usernames.
+        password_ok = db.verify_password(
+            password, row["password_hash"] if row is not None else None
+        )
 
-    template = """
-    <h2>Profile Page (Safe)</h2>
-    <p>Welcome, {{ user }}</p>
+        if row is None or (row["lock_until"] and row["lock_until"] > now):
+            flash(GENERIC_LOGIN_ERROR, "error")
+            return render_template("login.html"), 401
 
-    <form method="post">
-        Enter your bio:<br><br>
-        <textarea name="bio" rows="4" cols="40"></textarea><br><br>
-        <button type="submit">Save Bio</button>
-    </form>
+        if not password_ok:
+            db.register_login_failure(username, db.effective_attempts(row, now))
+            flash(GENERIC_LOGIN_ERROR, "error")
+            return render_template("login.html"), 401
 
-    <h3>Your Bio:</h3>
-    {{ bio }}
-    <br><br>
-    <a href="/">Home</a>
-    """
+        db.register_login_success(username)
 
-    return render_template_string(template, user=session["user"], bio=bio_display)
+        # Drop everything the pre-authentication session held, so a token an
+        # attacker planted in the victim's browser cannot survive into the
+        # authenticated session (session fixation).
+        session.clear()
+        session["user"] = username
+        session["is_admin"] = bool(row["is_admin"])
+        session.permanent = True
+        rotate_csrf_token()
+        return redirect(url_for("home"))
 
+    @app.route("/logout", methods=["POST"])
+    def logout():
+        session.clear()
+        rotate_csrf_token()
+        flash("Signed out.", "success")
+        return redirect(url_for("home"))
 
-# ---------- SEARCH (REFLECTED XSS - VULNERABLE) ----------
-@app.route("/search")
-def search():
-    query = request.args.get("q", "")
+    # -------------------------------------------------------------- profile
+    @app.route("/profile", methods=["GET", "POST"])
+    def profile():
+        user = _require_login()
 
-    return f"""
-    <h2>Search Page</h2>
-    <form>
-        Search: <input name="q">
-        <button type="submit">Search</button>
-    </form>
+        if request.method == "POST":
+            bio = (request.form.get("bio") or "").strip()
+            if len(bio) > config.MAX_BIO_LEN:
+                flash(
+                    f"Bio must be at most {config.MAX_BIO_LEN} characters.", "error"
+                )
+            else:
+                # Stored in the database, not the session: Flask session cookies
+                # cap out around 4KB, so a long bio in the session would silently
+                # produce an oversized cookie the browser drops.
+                db.set_bio(user, bio)
+                flash("Bio saved.", "success")
+            return redirect(url_for("profile"))
 
-    <h3>Results for: {query}</h3>
-    """
+        row = db.get_user(user)
+        if row is None:
+            session.clear()
+            return redirect(url_for("login"))
+        return render_template("profile.html", user=user, bio=row["bio"])
 
+    # ------------------------------------------------------------- transfer
+    @app.route("/transfer", methods=["GET", "POST"])
+    def transfer():
+        user = _require_login()
 
-# ---------- SEARCH (REFLECTED XSS - SAFE) ----------
-@app.route("/search_safe")
-def search_safe():
-    query = request.args.get("q", "")
+        if request.method == "POST":
+            try:
+                recipient = validate_username(request.form.get("to", ""))
+                amount_cents = parse_amount_to_cents(request.form.get("amount", ""))
+                db.transfer_funds(user, recipient, amount_cents)
+            except ValidationError as exc:
+                flash(str(exc), "error")
+            except db.UnknownRecipient:
+                flash("No account with that username.", "error")
+            except db.InsufficientFunds:
+                flash("Insufficient funds for that transfer.", "error")
+            except ValueError as exc:
+                flash(str(exc), "error")
+            else:
+                flash(
+                    f"Sent ${format_cents(amount_cents)} to {recipient}.", "success"
+                )
+            return redirect(url_for("transfer"))
 
-    template = """
-    <h2>Search Page (Safe)</h2>
-    <form>
-        Search: <input name="q">
-        <button type="submit">Search</button>
-    </form>
+        row = db.get_user(user)
+        if row is None:
+            session.clear()
+            return redirect(url_for("login"))
+        return render_template(
+            "transfer.html",
+            user=user,
+            balance_cents=row["balance_cents"],
+            transfers=db.recent_transfers(user),
+        )
 
-    <h3>Results for: {{ query }}</h3>
-    """
+    # ---------------------------------------------------------------- admin
+    @app.route("/admin")
+    def admin():
+        _require_login()
+        # Authentication is not authorisation: being signed in is checked above,
+        # having the admin role is checked here.
+        if not session.get("is_admin"):
+            abort(403)
+        return render_template("admin.html", users=db.list_users())
 
-    return render_template_string(template, query=query)
+    # --------------------------------------------------------------- search
+    @app.route("/search")
+    def search():
+        query = request.args.get("q", "")[:200]
+        return render_template("search.html", query=query)
 
-
-# ---------- ATTACKER COOKIE COLLECTOR ----------
-@app.route("/steal")
-def steal():
-    cookie = request.args.get("c")
-    print("🚨 Stolen cookie:", cookie)
-    return "Cookie received"
-
-
-# ---------- PROFILE (XSS DEMO - VULNERABLE) ----------
-@app.route("/profile", methods=["GET", "POST"])
-def profile():
-    if "user" not in session:
-        return redirect("/login")
-
-    if request.method == "POST":
-        bio = request.form["bio"]
-        session["bio"] = bio
-
-    bio_display = session.get("bio", "")
-
-    return f"""
-    <h2>Profile Page (Vulnerable)</h2>
-    <p>Welcome, {session['user']}</p>
-
-    <form method="post">
-        Enter your bio:<br><br>
-        <textarea name="bio" rows="4" cols="40"></textarea><br><br>
-        <button type="submit">Save Bio</button>
-    </form>
-
-    <h3>Your Bio:</h3>
-    {bio_display}
-    <br><br>
-    <a href="/">Home</a>
-    """
-
-
-# ---------- TRANSFER (CSRF PROTECTED) ----------
-@app.route("/transfer", methods=["GET", "POST"])
-def transfer():
-    if "user" not in session:
-        return redirect("/login")
-
-    if "csrf_token" not in session:
-        session["csrf_token"] = secrets.token_hex(16)
-
-    if request.method == "POST":
-        form_token = request.form.get("csrf_token")
-
-        if not form_token or form_token != session["csrf_token"]:
-            return "<h3>CSRF validation failed!</h3>"
-
-        amount = request.form.get("amount")
-        to_user = request.form.get("to")
-
-        return f"<h3>Transferred ${amount} to {to_user}</h3><a href='/'>Home</a>"
-
-    return f"""
-    <h2>Transfer Money</h2>
-    <form method="post">
-        <input type="hidden" name="csrf_token" value="{session['csrf_token']}">
-        To User: <input name="to"><br><br>
-        Amount: <input name="amount"><br><br>
-        <button type="submit">Send</button>
-    </form>
-    """
-
-# ---------- ADMIN PANEL (BROKEN ACCESS CONTROL - VULNERABLE) ----------
-@app.route("/admin_vuln")
-def admin_vuln():
-    if "user" not in session:
-        return redirect("/login")
-
-    # ❌ MISSING authorization check
-    return f"""
-    <h2>Admin Panel (Vulnerable)</h2>
-    <p>Welcome, {session['user']}</p>
-    <p>🔥 Sensitive admin data visible!</p>
-    <a href="/">Home</a>
-    """
-
-# ---------- ADMIN PANEL (SECURE) ----------
-@app.route("/admin_safe")
-def admin_safe():
-    if "user" not in session:
-        return redirect("/login")
-
-    if not is_admin_user(session["user"]):
-        return "<h3>Access denied: Admins only</h3>"
-
-    return f"""
-    <h2>Admin Panel (Secure)</h2>
-    <p>Welcome, {session['user']}</p>
-    <p>✅ Authorized admin access</p>
-    <a href="/">Home</a>
-    """
+    @app.route("/healthz")
+    def healthz():
+        return {"status": "ok", "lab_mode": config.LAB_MODE}
 
 
-# ---------- LOGOUT ----------
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
+# ------------------------------------------------------------ error handlers
+
+
+def _register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(HTTPException)
+    def _http_error(exc: HTTPException):
+        if exc.code == 401:
+            flash("Please sign in to continue.", "error")
+            return redirect(url_for("login"))
+        return (
+            render_template("error.html", code=exc.code, message=exc.description),
+            exc.code or 500,
+        )
+
+    @app.errorhandler(Exception)
+    def _unhandled(exc: Exception):
+        # Log the detail, show the user nothing: stack traces and driver messages
+        # in a response body are free reconnaissance.
+        app.logger.exception("Unhandled error on %s", request.path, exc_info=exc)
+        return (
+            render_template(
+                "error.html",
+                code=500,
+                message="Something went wrong. The error has been logged.",
+            ),
+            500,
+        )
+
+
+app = create_app()
 
 
 if __name__ == "__main__":
-    setup_database()
-    app.run(debug=True)
+    # debug=True would expose the Werkzeug console, which is remote code
+    # execution for anyone who can reach it. Opt in explicitly and locally only.
+    app.run(
+        host=os.environ.get("CYBERLAB_HOST", "127.0.0.1"),
+        port=config.env_int("CYBERLAB_PORT", 5000),
+        debug=config.env_bool("CYBERLAB_DEBUG", default=False),
+    )

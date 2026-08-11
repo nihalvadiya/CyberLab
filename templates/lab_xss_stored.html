@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Stored XSS lab — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Vulnerable profile (stored XSS)</h2>
+<p class="warn">The saved bio below is rendered with escaping disabled. Try
+<code>&lt;img src=x onerror=alert(1)&gt;</code>, then compare with
+<a href="{{ url_for('profile') }}">/profile</a>.</p>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="bio">Your bio</label>
+    <textarea id="bio" name="bio" rows="5">{{ bio }}</textarea>
+    <button type="submit">Save bio</button>
+</form>
+
+<h3>Saved bio (unescaped)</h3>
+<div class="bio">{{ bio | safe }}</div>
+{% endblock %}

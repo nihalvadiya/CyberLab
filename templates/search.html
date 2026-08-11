@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Search — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Search</h2>
+
+<form method="get">
+    <label for="q">Query</label>
+    <input id="q" name="q" value="{{ query }}" maxlength="200">
+    <button type="submit">Search</button>
+</form>
+
+{% if query %}
+    {# Autoescaped: a <script> payload in q renders as visible text. #}
+    <h3>Results for: {{ query }}</h3>
+    <p class="hint">No documents matched. This endpoint exists to show that
+    reflected input is escaped on output.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}SQLi lab — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Vulnerable login (SQL injection)</h2>
+<p class="warn">This handler concatenates your input into the SQL string. Try
+<code>' OR '1'='1' --</code> as the username.</p>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="username">Username</label>
+    <input id="username" name="username">
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password">
+
+    <button type="submit">Sign in</button>
+</form>
+
+{% if query %}
+    <h3>Executed query</h3>
+    <pre class="code">{{ query }}</pre>
+{% endif %}
+
+{% if error %}
+    <h3>Database error</h3>
+    <pre class="code">{{ error }}</pre>
+    <p class="hint">Leaking driver errors like this is itself a finding: it hands
+    an attacker the schema and the injection point for free.</p>
+{% elif result %}
+    <h3 class="warn">Authentication bypassed — matched user: {{ result }}</h3>
+    <p class="hint">No password was verified. <a href="{{ url_for('login') }}">/login</a>
+    binds parameters, so the same input is treated as a literal username.</p>
+{% endif %}
+{% endblock %}

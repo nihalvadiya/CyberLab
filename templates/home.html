@@ -1,13 +1,26 @@
 {% extends "base.html" %}
+{% block title %}CyberLab &mdash; Home{% endblock %}
 
 {% block content %}
-
 {% if user %}
-    <h2>Welcome, {{ user }}!</h2>
-    <a href="/logout">Logout</a>
+    <h2>Welcome, {{ user }}</h2>
+    <p>You are signed in. Use the navigation above to reach your profile,
+    move funds, or search.</p>
 {% else %}
-    <h2>You are not logged in</h2>
-    <a href="/login">Login</a>
+    <h2>You are not signed in</h2>
+    <p><a href="{{ url_for('login') }}">Sign in</a> or
+       <a href="{{ url_for('register') }}">create an account</a> to continue.</p>
 {% endif %}
 
+<h3>About this application</h3>
+<p>CyberLab is a small banking-style Flask app used to demonstrate web
+application security controls: bcrypt password storage, account lockout,
+per-IP throttling, CSRF tokens, a strict Content Security Policy, and
+role-based authorisation.</p>
+
+{% if lab_mode %}
+<p class="warn">Lab mode is enabled, so deliberately vulnerable counterparts of
+these features are also mounted under <a href="{{ url_for('lab.index') }}">/lab</a>
+for side-by-side comparison.</p>
+{% endif %}
 {% endblock %}

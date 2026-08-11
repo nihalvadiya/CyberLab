@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Error {{ code }} — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Error {{ code }}</h2>
+<p>{{ message }}</p>
+<p><a href="{{ url_for('home') }}">Back to home</a></p>
+{% endblock %}

@@ -1,28 +1,56 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Flask Security Lab</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}CyberLab{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-<h1>🔐 Flask Web Security Lab</h1>
+<header class="masthead">
+    <h1>CyberLab &mdash; Web Security Lab</h1>
+    {% if lab_mode %}
+        <p class="lab-banner">Lab mode is ON. Vulnerable endpoints are live under
+        <a href="{{ url_for('lab.index') }}">/lab</a>. Do not expose this host.</p>
+    {% endif %}
+</header>
 
-<!-- 🔹 Navigation Bar -->
-<div style="background:#111827; padding:10px;">
-    <a href="/" style="color:white; margin-right:15px;">Home</a>
-    <a href="/login" style="color:white; margin-right:15px;">Login</a>
-    <a href="/register" style="color:white; margin-right:15px;">Register</a>
-    <a href="/profile" style="color:white; margin-right:15px;">Profile</a>
-    <a href="/transfer" style="color:white; margin-right:15px;">Transfer</a>
-    <a href="/search" style="color:white; margin-right:15px;">Search</a>
-    <a href="/logout" style="color:#f87171;">Logout</a>
-</div>
+<nav class="nav">
+    <a href="{{ url_for('home') }}">Home</a>
+    {% if session.get('user') %}
+        <a href="{{ url_for('profile') }}">Profile</a>
+        <a href="{{ url_for('transfer') }}">Transfer</a>
+        <a href="{{ url_for('search') }}">Search</a>
+        {% if session.get('is_admin') %}
+            <a href="{{ url_for('admin') }}">Admin</a>
+        {% endif %}
+        {% if lab_mode %}
+            <a href="{{ url_for('lab.index') }}">Lab</a>
+        {% endif %}
+        <form class="nav-form" method="post" action="{{ url_for('logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="linkish" type="submit">Sign out</button>
+        </form>
+    {% else %}
+        <a href="{{ url_for('login') }}">Sign in</a>
+        <a href="{{ url_for('register') }}">Register</a>
+    {% endif %}
+</nav>
 
-<div class="container">
-{% block content %}
-{% endblock %}
-</div>
+<main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <ul class="flashes">
+                {% for category, message in messages %}
+                    <li class="flash flash-{{ category }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</main>
 
 </body>
 </html>

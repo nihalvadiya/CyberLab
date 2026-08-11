@@ -1,13 +1,20 @@
 {% extends "base.html" %}
+{% block title %}Sign in &mdash; CyberLab{% endblock %}
 
 {% block content %}
-
-<h2>Login</h2>
+<h2>Sign in</h2>
 
 <form method="post">
-    Username: <input name="username"><br><br>
-    Password: <input name="password" type="password"><br><br>
-    <button type="submit">Login</button>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" required>
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password"
+           autocomplete="current-password" required>
+
+    <button type="submit">Sign in</button>
 </form>
 
+<p>No account? <a href="{{ url_for('register') }}">Register</a>.</p>
 {% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Transfer — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Transfer funds</h2>
+<p>Balance: <strong>${{ balance_cents | money }}</strong></p>
+
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="to">Recipient username</label>
+    <input id="to" name="to" maxlength="32" required>
+
+    <label for="amount">Amount</label>
+    <input id="amount" name="amount" inputmode="decimal"
+           pattern="[0-9]{1,12}(\.[0-9]{1,2})?" placeholder="10.00" required>
+
+    <button type="submit">Send</button>
+</form>
+
+<h3>Recent activity</h3>
+{% if transfers %}
+    <table class="ledger">
+        <thead>
+            <tr><th>From</th><th>To</th><th>Amount</th></tr>
+        </thead>
+        <tbody>
+        {% for t in transfers %}
+            <tr>
+                <td>{{ t['sender'] }}</td>
+                <td>{{ t['recipient'] }}</td>
+                <td>${{ t['amount_cents'] | money }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p class="hint">No transfers yet.</p>
+{% endif %}
+
+<p class="hint">This form carries a per-session CSRF token and the session
+cookie is <code>SameSite=Lax</code>, so a cross-site POST (see
+<code>attacker.html</code>) is rejected.</p>
+{% endblock %}

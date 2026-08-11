@@ -1,13 +1,25 @@
 {% extends "base.html" %}
+{% block title %}Register &mdash; CyberLab{% endblock %}
 
 {% block content %}
-
-<h2>Register</h2>
+<h2>Create an account</h2>
 
 <form method="post">
-    Username: <input name="username"><br><br>
-    Password: <input name="password" type="password"><br><br>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username"
+           minlength="3" maxlength="32" required>
+
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password"
+           autocomplete="new-password" minlength="12" maxlength="72" required>
+
     <button type="submit">Register</button>
 </form>
 
+<p class="hint">Usernames are 3&ndash;32 characters (letters, digits, and
+<code>_ . -</code>). Passwords are at least 12 characters and at most 72 bytes,
+which is the maximum bcrypt hashes.</p>
+
+<p>Already registered? <a href="{{ url_for('login') }}">Sign in</a>.</p>
 {% endblock %}

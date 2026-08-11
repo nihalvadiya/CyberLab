@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Lab — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Vulnerable endpoints</h2>
+<p class="warn">Every page below is broken on purpose. They exist only because
+<code>CYBERLAB_LAB_MODE=1</code> is set; with it unset they are not registered
+and return 404.</p>
+
+<table class="ledger">
+    <thead><tr><th>Vulnerability</th><th>Vulnerable</th><th>Hardened</th></tr></thead>
+    <tbody>
+        <tr>
+            <td>SQL injection</td>
+            <td><a href="{{ url_for('lab.login_sqli') }}">/lab/login-sqli</a></td>
+            <td><a href="{{ url_for('login') }}">/login</a></td>
+        </tr>
+        <tr>
+            <td>Stored XSS</td>
+            <td><a href="{{ url_for('lab.profile_xss') }}">/lab/profile-xss</a></td>
+            <td><a href="{{ url_for('profile') }}">/profile</a></td>
+        </tr>
+        <tr>
+            <td>Reflected XSS</td>
+            <td><a href="{{ url_for('lab.search_xss') }}">/lab/search-xss</a></td>
+            <td><a href="{{ url_for('search') }}">/search</a></td>
+        </tr>
+        <tr>
+            <td>Broken access control</td>
+            <td><a href="{{ url_for('lab.admin_open') }}">/lab/admin-open</a></td>
+            <td><a href="{{ url_for('admin') }}">/admin</a></td>
+        </tr>
+        <tr>
+            <td>Cookie exfiltration sink</td>
+            <td><a href="{{ url_for('lab.steal') }}">/lab/steal</a></td>
+            <td>&mdash;</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>What the defences do to these payloads</h3>
+<p>The Content Security Policy on every response sets <code>script-src 'self'</code>,
+so injected inline scripts are blocked by the browser even where the server
+reflects them. Open the developer console to see the CSP violation. The session
+cookie is <code>HttpOnly</code>, so a payload that reaches
+<code>/lab/steal</code> carries an empty cookie value.</p>
+{% endblock %}

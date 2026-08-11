@@ -1,0 +1,22 @@
+# Runtime data — never commit a real user database
+database/*.db
+database/*.db-journal
+database/*.db-wal
+database/*.db-shm
+*.db
+
+# Secrets
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

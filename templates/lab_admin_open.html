@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Broken access control lab — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Admin panel (no authorisation check)</h2>
+<p class="warn">You are seeing this because you are signed in — the handler
+never checks whether you hold the admin role. Any account reaches it.
+<a href="{{ url_for('admin') }}">/admin</a> checks the role and returns 403.</p>
+
+<table class="ledger">
+    <thead><tr><th>Username</th><th>Role</th><th>Balance</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+        <tr>
+            <td>{{ u['username'] }}</td>
+            <td>{{ 'admin' if u['is_admin'] else 'user' }}</td>
+            <td>${{ u['balance_cents'] | money }}</td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

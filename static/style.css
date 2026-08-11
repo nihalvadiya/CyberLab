@@ -1,62 +1,196 @@
-/* 🔐 Flask Security Lab — Clean Minimal Style */
+/* CyberLab — all styling lives here so the CSP can forbid inline styles. */
 
-body {
-    font-family: Arial, Helvetica, sans-serif;
-    background-color: #f4f6f8;
-    margin: 0;
-    padding: 0;
+:root {
+    --ink: #111827;
+    --ink-soft: #4b5563;
+    --surface: #ffffff;
+    --page: #f4f6f8;
+    --line: #d8dee6;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --danger: #b91c1c;
+    --danger-bg: #fee2e2;
+    --ok: #166534;
+    --ok-bg: #dcfce7;
 }
 
-h1 {
-    background-color: #1f2937;
-    color: white;
-    padding: 16px;
+* { box-sizing: border-box; }
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    background-color: var(--page);
+    color: var(--ink);
     margin: 0;
+    line-height: 1.5;
+}
+
+.masthead {
+    background-color: #1f2937;
+    color: #ffffff;
+    padding: 16px 24px;
+}
+
+.masthead h1 {
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.lab-banner {
+    margin: 8px 0 0;
+    padding: 8px 12px;
+    background: #7f1d1d;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.lab-banner a { color: #fecaca; }
+
+.nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    background: #111827;
+    padding: 10px 24px;
+}
+
+.nav a, .nav .linkish {
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.9375rem;
+}
+
+.nav a:hover, .nav .linkish:hover { text-decoration: underline; }
+
+.nav-form { display: inline; background: none; padding: 0; box-shadow: none; }
+
+.linkish {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: #f87171;
+    font-family: inherit;
 }
 
 .container {
-    padding: 30px;
+    padding: 24px;
+    max-width: 860px;
 }
 
-h2 {
-    color: #111827;
-}
+h2 { color: var(--ink); margin-top: 0; }
+h3 { color: var(--ink); margin-bottom: 8px; }
 
-a {
-    color: #2563eb;
-    text-decoration: none;
-    font-weight: bold;
-}
-
-a:hover {
-    text-decoration: underline;
-}
+a { color: var(--accent); font-weight: 600; }
+a:hover { text-decoration: underline; }
 
 form {
-    background: white;
+    background: var(--surface);
     padding: 20px;
+    border: 1px solid var(--line);
     border-radius: 8px;
-    width: fit-content;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    max-width: 420px;
+    margin-bottom: 24px;
+}
+
+label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 4px;
 }
 
 input, textarea {
+    display: block;
+    width: 100%;
     padding: 8px;
-    margin-top: 5px;
-    margin-bottom: 10px;
-    width: 250px;
+    margin-bottom: 16px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 1rem;
 }
 
+textarea { resize: vertical; }
+
 button {
-    background-color: #2563eb;
-    color: white;
+    background-color: var(--accent);
+    color: #ffffff;
     border: none;
     padding: 10px 16px;
     border-radius: 6px;
     cursor: pointer;
-    font-weight: bold;
+    font-weight: 600;
+    font-size: 0.9375rem;
 }
 
-button:hover {
-    background-color: #1d4ed8;
+button:hover { background-color: var(--accent-dark); }
+
+.flashes { list-style: none; padding: 0; margin: 0 0 20px; }
+
+.flash {
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 0.9375rem;
+}
+
+.flash-error { background: var(--danger-bg); color: var(--danger); }
+.flash-success { background: var(--ok-bg); color: var(--ok); }
+
+.hint { color: var(--ink-soft); font-size: 0.875rem; }
+
+.warn {
+    background: var(--danger-bg);
+    color: var(--danger);
+    padding: 10px 14px;
+    border-radius: 6px;
+}
+
+.bio {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.code {
+    background: #1f2937;
+    color: #e5e7eb;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.8125rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.ledger {
+    border-collapse: collapse;
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.ledger th, .ledger td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.9375rem;
+}
+
+.ledger th { background: #f9fafb; font-size: 0.8125rem; text-transform: uppercase; }
+.ledger tr:last-child td { border-bottom: none; }
+
+code {
+    background: #e5e7eb;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.875em;
 }

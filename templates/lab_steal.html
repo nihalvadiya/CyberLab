@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Exfil sink — CyberLab{% endblock %}
+
+{% block content %}
+<h2>Cookie exfiltration sink</h2>
+
+{% if cookie %}
+    <p class="warn">Received a value:</p>
+    <pre class="code">{{ cookie }}</pre>
+{% else %}
+    <p>Received an empty value.</p>
+{% endif %}
+
+<p class="hint">An XSS payload calling
+<code>fetch('/lab/steal?c='+document.cookie)</code> cannot read the session
+cookie, because it is set with <code>HttpOnly</code>. The value arriving here
+empty is the demonstration.</p>
+{% endblock %}
